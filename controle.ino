@@ -1,9 +1,11 @@
-#include <LiquidCrystal.h>
+// declaração das bibliotecas necessárias
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Keypad.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
  
-// Porta do pino de sinal do DS18B20
+// declaração dos pinos e variáveis que serão utilizadas
 #define ONE_WIRE_BUS 24
 int PIN_VALVE_1 = 9;
 int PIN_VALVE_2 = 8;
@@ -12,8 +14,17 @@ int alturaAgua = 0;
 
 const byte ROWS = 4;
 const byte COLS = 4;
+byte rowPins[ROWS] = { 44, 45, 46, 47 };
+byte colPins[COLS] = { 48, 49, 50, 51 };
+unsigned long time;
 
-LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+// variáveis necessárias para realizar operações com temperatura e tratar os dados do dispaly
+float temperaturaLida = 0;
+float temperaturaDesejada = 25;
+char temp[6];
+char customKey;
+String byteRecebido;
+int index;
 
 char hexaKeys[ROWS][COLS] = {
   { '1', '2', '3', 'A' },
@@ -22,24 +33,17 @@ char hexaKeys[ROWS][COLS] = {
 { '*', '0', '#', 'D' }
 };
 
-byte rowPins[ROWS] = { 44, 45, 46, 47 };
-byte colPins[COLS] = { 48, 49, 50, 51 };
 
-Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
+LiquidCrystal_I2C lcd(0x27,2,1,0,4,5,6,7,3, POSITIVE); // criação do objeto lcd
 
-unsigned long time;
- 
+Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS); // criação do objeto keypad
+
+
 // Define uma instancia do oneWire para comunicacao com o sensor
 OneWire oneWire(ONE_WIRE_BUS);
 
  
-// Armazena temperaturas minima e maxima
-float temperaturaLida = 0;
-float temperaturaDesejada = 25;
-char temp[6];
-char customKey;
-String byteRecebido;
-int index;
+
  
 DallasTemperature sensors(&oneWire);
 DeviceAddress sensor1;
@@ -47,9 +51,9 @@ DeviceAddress sensor1;
 void setup()
 {
 
-  delay(3000);
+  //delay(3000);
   lcd.begin(16, 2);
-
+  // definição e setagem de algumas portas utilizadas
   pinMode(PIN_VALVE_1,OUTPUT);
   pinMode(PIN_VALVE_2,OUTPUT);
   pinMode(PIN_HOTASS,OUTPUT);
@@ -61,6 +65,7 @@ void setup()
   
   Serial.begin(9600);
   sensors.begin();
+
   // Localiza e mostra enderecos dos sensores
   Serial.println("Localizando sensores DS18B20...");
   Serial.print("Foram encontrados ");
@@ -75,13 +80,15 @@ void setup()
  
 void loop()
 {
-  sensors.requestTemperatures();
-  temperaturaLida = sensors.getTempC(sensor1);
 
-  alturaAgua = analogRead(A2);
+  lcd.setBacklight(HIGH); // liga o backlight do display
+  sensors.requestTemperatures(); // solicita ao sensor para medir a temperatura
+  temperaturaLida = sensors.getTempC(sensor1); // armazena a temperatura (em celsius) em 'temperaturalida'
 
-  
-  Serial.print(temperaturaLida);
+  alturaAgua = analogRead(A2); // faz a leitura de A2 para verificar se a água chegou ao limite do tanque
+
+  // printa os dados obtidos para posterior análise dos mesmos
+  Serial.print(temperaturaLida); 
   time = millis();
   Serial.print(',');
   Serial.print(time);
@@ -89,7 +96,7 @@ void loop()
   Serial.println(alturaAgua);
 
 
-  lcd.clear();
+  // mostra a temperatura desejada e a atual no display
   lcd.setCursor(0, 0);
   lcd.print("T. alvo: ");
   lcd.print(temperaturaDesejada);
@@ -98,6 +105,8 @@ void loop()
   lcd.print(temperaturaLida);
 
   customKey = customKeypad.getKey();
+  
+  // trecho de código responsável pela mudança de temperatura quando o botão '*' é pressionado
   if (customKey == '*') {
     
     Serial.println("Botão de mudança de temperatura acionado");
@@ -138,26 +147,27 @@ void loop()
 
   }
 
-
+  // caso o valor em 'alturaAgua' esteja acima do limite, ativa a válvula do tanque de baixo
   if(alturaAgua >= 15){
     digitalWrite(PIN_VALVE_2, LOW);
   }
 
+  // caso o valor em 'alturaAgua' esteja abaixo do limite, ativa a válvula do tanque de baixo
   if(alturaAgua < 15){
     digitalWrite(PIN_VALVE_2, HIGH);
   }
 
-
+  // se a temperatura lida for menor que a desejada, ativa o aquecedor e desliga a válvula do tanque superior
   if(temperaturaLida < temperaturaDesejada){
     digitalWrite(PIN_VALVE_1, HIGH);
     digitalWrite(PIN_HOTASS, LOW);
   }
 
+  // se a temperatura lida for maior que a desejada, desliga o aquecedor e ativa a válvula do tanque superior
   if(temperaturaLida > temperaturaDesejada){
     digitalWrite(PIN_VALVE_1, LOW);
     digitalWrite(PIN_HOTASS, HIGH);
   }
 
-  //Serial.println(temperaturaDesejada);
   delay(50);
 }
